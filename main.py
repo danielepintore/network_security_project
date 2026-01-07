@@ -5,6 +5,7 @@ import subprocess
 import os
 import time
 import sys
+import warnings
 from contextlib import contextmanager
 
 def choose_interface():
@@ -127,6 +128,7 @@ COLUMN_MAP = {
     "idle_min": "Idle Min"
 }
 
+
 def run_command(command, error_message):
     try:
         subprocess.run(command, check=True, capture_output=True, text=True)
@@ -162,6 +164,7 @@ def cleanup():
         
 
 def main():
+    warnings.filterwarnings("ignore")
     check_dependencies()
 
     print(f"Loading model: {MODEL_FILENAME}...")
