@@ -187,7 +187,7 @@ def main():
             with cleanup():
                 try:
                     run_command(
-                        ["tshark", "-i", CAPTURE_INTERFACE, "-a", f"duration:{CAPTURE_DURATION_SECONDS}", "-w", PCAP_FILE],
+                        ["tshark", "-i", CAPTURE_INTERFACE, "-a", f"duration:{CAPTURE_DURATION_SECONDS}", "-w", PCAP_FILE, "-F", "pcap"],
                         "Failed to capture traffic with tshark."
                     )
                 except Exception:
