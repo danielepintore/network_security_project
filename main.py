@@ -7,6 +7,7 @@ import sys
 import time
 import warnings
 
+from train import train
 from contextlib import contextmanager
 
 
@@ -170,8 +171,9 @@ def main():
         model = joblib.load(MODEL_FILENAME)
         print("Model loaded successfully.")
     except Exception as e:
-        print(f"Error loading model: {e}")
-        sys.exit(1)
+        train(MODEL_FILENAME)
+        model = joblib.load(MODEL_FILENAME)
+        print("Model loaded successfully.")
 
     print(
         f"\nStarting real-time DoS/DDoS detection on interface '{CAPTURE_INTERFACE}'..."
