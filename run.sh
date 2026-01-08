@@ -1,12 +1,14 @@
 #!/usr/bin/env sh
 
+# Quit upon error
 set -e
 
+# Create virtual environment
 if [ ! -d "./venv/" ]; then
-    # no venv
     python3 -m venv venv
 fi
 
+# Activate virtual environment
 . ./venv/bin/activate
 if [ -n "$VIRTUAL_ENV" ]; then
     echo "Virtualenv is activated: $VIRTUAL_ENV"
@@ -16,6 +18,7 @@ else
     exit 1
 fi
 
+# build tooling for feature extraction from pcap since it is broken in the upstream
 cd cicflowmeter
 uv sync --active 
 cd ..

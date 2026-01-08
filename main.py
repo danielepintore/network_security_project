@@ -1,20 +1,24 @@
-import pandas as pd
-import numpy as np
 import joblib
-import subprocess
+import numpy as np
 import os
-import time
+import pandas as pd
+import subprocess
 import sys
+import time
 import warnings
+
 from contextlib import contextmanager
+
 
 def choose_interface():
     interfaces = []
     try:
-        result = subprocess.run(["tshark", "-D"], capture_output=True, text=True, check=True)
-        for line in result.stdout.strip().split('\n'):
+        result = subprocess.run(
+            ["tshark", "-D"], capture_output=True, text=True, check=True
+        )
+        for line in result.stdout.strip().split("\n"):
             if line:
-                index, name = line.split('.', 1)
+                index, name = line.split(".", 1)
                 interfaces.append((index.strip(), name.strip()))
     except subprocess.CalledProcessError:
         print("Error retrieving network interfaces.")
@@ -32,13 +36,14 @@ def choose_interface():
     print("Invalid selection.")
     sys.exit(1)
 
+
 CAPTURE_INTERFACE = choose_interface()
 CAPTURE_DURATION_SECONDS = 5
-PCAP_FILE = "/tmp/temp_capture.pcap"
-FLOWS_CSV = "/tmp/temp_flows.csv"
+PCAP_FILE = "/tmp/capture.pcap"
+FLOWS_CSV = "/tmp/flows.csv"
 MODEL_FILENAME = "rf_dos_model.joblib"
 
-# Features attese dal modello
+# Features used by the model
 MODEL_FEATURES = [
     "Bwd Packet Length Mean",
     "Fwd IAT Std",
@@ -47,7 +52,7 @@ MODEL_FEATURES = [
     "Init Fwd Win Bytes",
 ]
 
-# Mapping colonne (cicflowmeter -> modello)
+# Column mapping 
 COLUMN_MAP = {
     "protocol": "Protocol",
     "flow_duration": "Flow Duration",
@@ -125,27 +130,12 @@ COLUMN_MAP = {
     "idle_mean": "Idle Mean",
     "idle_std": "Idle Std",
     "idle_max": "Idle Max",
-    "idle_min": "Idle Min"
+    "idle_min": "Idle Min",
 }
 
+def clear_screen():
+    os.system('clear' if os.name == 'posix' else 'cls')
 
-def run_command(command, error_message):
-    try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error: {error_message}")
-        print(f"Command: {' '.join(command)}")
-        print(f"Stdout: {e.stdout}")
-        print(f"Stderr: {e.stderr}")
-        raise e
-
-def cleanup_files(*files):
-    for f in files:
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
 
 def check_dependencies():
     print("Checking dependencies...")
@@ -157,11 +147,19 @@ def check_dependencies():
         print("Error: tshark not found. Please install it (sudo apt install tshark).")
         sys.exit(1)
 
+
+# Context manager to clean up temporary files
 @contextmanager
 def cleanup():
     yield
-    cleanup_files(PCAP_FILE, FLOWS_CSV)
-        
+    files = [PCAP_FILE, FLOWS_CSV]
+    for f in files:
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+
 
 def main():
     warnings.filterwarnings("ignore")
@@ -175,34 +173,34 @@ def main():
         print(f"Error loading model: {e}")
         sys.exit(1)
 
-    print(f"\nStarting real-time DoS/DDoS detection on interface '{CAPTURE_INTERFACE}'...")
-    print(f"Capturing in {CAPTURE_DURATION_SECONDS}-second intervals. Press Ctrl+C to stop.")
+    print(
+        f"\nStarting real-time DoS/DDoS detection on interface '{CAPTURE_INTERFACE}'..."
+    )
+    print(
+        f"Capturing in {CAPTURE_DURATION_SECONDS}-second intervals. Press Ctrl+C to stop."
+    )
 
     try:
+        clear_screen()
         while True:
-            start_time = time.time()
             print(f"\n--- Cycle started at {time.strftime('%H:%M:%S')} ---")
 
             print(f"Capturing network traffic for {CAPTURE_DURATION_SECONDS}s...")
             with cleanup():
                 try:
-                    run_command(
-                        ["tshark", "-i", CAPTURE_INTERFACE, "-a", f"duration:{CAPTURE_DURATION_SECONDS}", "-w", PCAP_FILE, "-F", "pcap"],
-                        "Failed to capture traffic with tshark."
-                    )
+                    subprocess.run(["tshark", "-i", CAPTURE_INTERFACE, "-a", f"duration:{CAPTURE_DURATION_SECONDS}", "-w", PCAP_FILE, "-F", "pcap"], check=True, capture_output=True)
                 except Exception:
                     time.sleep(5)
                     continue
 
-                print("Extracting features...")
 
                 try:
-                    run_command(
-                        ["cicflowmeter", "-f", PCAP_FILE, "-c", FLOWS_CSV],
-                        "Failed to extract features."
+                    print("Extracting features...")
+                    subprocess.run(
+                        ["cicflowmeter", "-f", PCAP_FILE, "-c", FLOWS_CSV], check=True, capture_output=True
                     )
-                except Exception as e:
-                    print(e)
+                except Exception:
+                    print("Failed to extract features.")
                     continue
 
                 if not os.path.exists(FLOWS_CSV) or os.path.getsize(FLOWS_CSV) == 0:
@@ -219,46 +217,50 @@ def main():
                     print("CSV empty.")
                     continue
 
-                # Rinomina colonne
+                # Update column names, to match those used in training
                 original_columns = set(df_flows.columns)
                 renamed_columns = {}
                 for original, new in COLUMN_MAP.items():
                     if original in original_columns:
                         renamed_columns[original] = new
                 df_flows = df_flows.rename(columns=renamed_columns)
-                
-                # Aggiungi colonne mancanti come 0 o NaN
+
+                # Ensure all model features are present, by adding all 
+                # features used in cicflowmeter
                 for feature in MODEL_FEATURES:
                     if feature not in df_flows.columns:
-                        df_flows[feature] = 0 
-                X_new = df_flows[MODEL_FEATURES].copy()
-                X_new.replace([np.inf, -np.inf], np.nan, inplace=True)
-                X_new.dropna(inplace=True)
+                        df_flows[feature] = 0
 
-                if len(X_new) > 0:
-                    predictions = model.predict(X_new) # TODO: remove warning
-                    results = pd.Series(predictions).value_counts()
-                    
+                # Isolate only the features used by the model
+                features_data = df_flows[MODEL_FEATURES].copy()
+                features_data.replace([np.inf, -np.inf], np.nan, inplace=True)
+                features_data.dropna(inplace=True)
+
+                # Perform predictions
+                if len(features_data) > 0:
+                    predictions = model.predict(features_data)
+                    results = pd.Series(predictions).value_counts() 
+
                     print(f"Flows analyzed: {len(predictions)}")
                     benign = results.get("Benign", 0)
-                    malicious = len(predictions) - benign
-                    
+                    malicious = len(predictions) - (benign or 0)
+
                     print(f"Normal: {benign} | Suspicious: {malicious}")
-                    
+
                     if malicious > 0:
-                        print("\n!!! WARNING: POTENTIAL ATTACK DETECTED !!!")
+                        print("\n!!! WARNING: POTENTIAL ATTACK DETECTED!!!")
                         print(results)
                 else:
                     print("No valid flows for inference.")
 
-                
-            elapsed = time.time() - start_time
-            # Aggiungiamo un piccolo buffer per evitare sovrapposizioni
-            if elapsed < CAPTURE_DURATION_SECONDS + 2:
-                pass 
+                # delay to see results
+                time.sleep(5)
+                clear_screen()
+
 
     except KeyboardInterrupt:
         print("\nStopping...")
+
 
 if __name__ == "__main__":
     main()
