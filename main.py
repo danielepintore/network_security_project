@@ -170,10 +170,14 @@ def main():
     try:
         model = joblib.load(MODEL_FILENAME)
         print("Model loaded successfully.")
-    except Exception as e:
-        train(MODEL_FILENAME)
-        model = joblib.load(MODEL_FILENAME)
-        print("Model loaded successfully.")
+    except Exception:
+        try: 
+            train(MODEL_FILENAME)
+            model = joblib.load(MODEL_FILENAME)
+            print("Model loaded successfully.")
+        except Exception as e:
+            print(f"Failed to load model: {e}")
+            sys.exit(1)
 
     print(
         f"\nStarting real-time DoS/DDoS detection on interface '{CAPTURE_INTERFACE}'..."
