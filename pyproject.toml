@@ -1,0 +1,22 @@
+[project]
+name = "network-sec-project-ids"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "cicflowmeter",
+    "fastparquet>=2025.12.0",
+    "joblib>=1.5.3",
+    "kagglehub>=0.4.0",
+    "numpy>=2.4.0",
+    "pandas>=2.3.3",
+    "pyarrow>=22.0.0",
+    "scikit-learn>=1.8.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "cicflowmeter",
+]
+
+[tool.uv.sources]
+cicflowmeter = { workspace = true }

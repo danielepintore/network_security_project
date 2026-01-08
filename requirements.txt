@@ -1,8 +1,0 @@
-uv
-joblib
-numpy
-pandas
-scikit-learn
-kagglehub
-pyarrow
-fastparquet
